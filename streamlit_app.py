@@ -2,6 +2,7 @@ import streamlit as st
 import google.generativeai as genai
 from PIL import Image
 import os
+import re
 
 # Set page config
 st.set_page_config(
@@ -96,6 +97,41 @@ def create_assistant(context):
     
     return full_prompt
 
+def convert_markdown_images_to_streamlit(text):
+    """Convert markdown images ![alt](url) to st.image() calls"""
+    # Pattern to match markdown images: ![alt text](image_url)
+    pattern = r'!\[([^\]]*)\]\(([^)]+)\)'
+    
+    def replace_image(match):
+        alt_text = match.group(1)
+        image_url = match.group(2)
+        # Return a placeholder that we'll handle separately
+        return f"__STREAMLIT_IMAGE__{image_url}__{alt_text}__"
+    
+    return re.sub(pattern, replace_image, text)
+
+def display_content_with_images(content):
+    """Display content and handle embedded images"""
+    # Convert markdown images to placeholders
+    processed_content = convert_markdown_images_to_streamlit(content)
+    
+    # Split by image placeholders
+    parts = re.split(r'__STREAMLIT_IMAGE__([^_]+)__([^_]*)__', processed_content)
+    
+    for i in range(0, len(parts), 3):
+        # Regular text part
+        if parts[i].strip():
+            st.markdown(parts[i])
+        
+        # Check if there's an image following
+        if i + 1 < len(parts) and i + 2 < len(parts):
+            image_url = parts[i + 1]
+            caption = parts[i + 2]
+            try:
+                st.image(image_url, caption=caption if caption else None)
+            except Exception as e:
+                st.error(f"Erro ao carregar imagem: {image_url}")
+
 # Main app
 def main():
     # Header
@@ -135,7 +171,7 @@ def main():
                     response = model.generate_content(full_prompt)
                     
                     if response.text:
-                        st.markdown(response.text)
+                        display_content_with_images(response.text)
                         # Add assistant response to chat history
                         st.session_state.messages.append({"role": "assistant", "content": response.text})
                     else:
